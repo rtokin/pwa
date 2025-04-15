@@ -1,20 +1,17 @@
-import Note from './Note' // Добавьте этот импорт
+import NoteItem from './NoteItem'
 
-export default function NoteList({ notes, onDelete, onUpdate }) {
+export default function NoteList({ notes, onDelete, onUpdate, onToggleCompleted }) {
   return (
-    <div className="notes-container">
-      {notes.length === 0 ? (
-        <p className="empty-state">Нет заметок</p>
-      ) : (
-        notes.map((note) => (
-          <Note
-            key={note.id}
-            note={note}
-            onDelete={onDelete}
-            onUpdate={onUpdate}
-          />
-        ))
-      )}
+    <div className="note-list">
+      {notes.map(note => (
+        <NoteItem 
+          key={note.id} 
+          note={note} 
+          onDelete={onDelete} 
+          onUpdate={onUpdate}
+          onToggleCompleted={onToggleCompleted} 
+        />
+      ))}
     </div>
   )
 }
