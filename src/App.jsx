@@ -2,16 +2,42 @@ import { useState, useEffect } from 'react'
 import AddNote from './components/AddNote'
 import NoteList from './components/NoteList'
 import Filter from './components/Filter'
-import './App.css' // новый или обновлённый стиль для обновлённого интерфейса
+import './App.css'
 
 export default function App() {
-  // Состояния приложения
   const [notes, setNotes] = useState([])
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [installPrompt, setInstallPrompt] = useState(null)
   const [showInstallButton, setShowInstallButton] = useState(false)
-  const [filter, setFilter] = useState('Все') // новый фильтр
+  const [filter, setFilter] = useState('Все')
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
+  const [isSubscribed, setIsSubscribed] = useState(
+    localStorage.getItem('notifications') === 'enabled'
+  )
+
+  // 2-часовое напоминание о задачах
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const permission = Notification.permission
+      const notificationsEnabled = localStorage.getItem('notifications') === 'enabled'
+
+      if (permission === 'granted' && notificationsEnabled) {
+        const tasks = JSON.parse(localStorage.getItem('tasks') || '[]')
+        const activeTasks = tasks.filter(task => !task.completed)
+
+        if (activeTasks.length > 0) {
+          navigator.serviceWorker.ready.then(reg => {
+            reg.showNotification(`У тебя ${activeTasks.length} невыполненных задач 🕒`, {
+              body: 'Загляни и отметь, что сделал!',
+              icon: '/icons/icon-192x192.png'
+            })
+          })
+        }
+      }
+    }, 2 * 60 * 60 * 1000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   // Загрузка заметок из localStorage
   useEffect(() => {
@@ -58,19 +84,19 @@ export default function App() {
     }
   }, [])
 
-  // Функции для работы с заметками
   const handleAddNote = (text) => {
     if (!text.trim()) return
     const newNote = {
       id: Date.now(),
       text: text.trim(),
       date: new Date().toLocaleString(),
-      completed: false // новое поле состояния выполнения
+      completed: false
     }
     setNotes(prevNotes => [newNote, ...prevNotes])
-    // Пример уведомления при добавлении заметки, если уведомления включены
     if (notificationsEnabled && Notification.permission === 'granted') {
-      new Notification('Новая заметка', { body: newNote.text })
+      navigator.serviceWorker.ready.then(reg => {
+        reg.showNotification('Новая заметка', { body: newNote.text })
+      })
     }
   }
 
@@ -86,7 +112,6 @@ export default function App() {
     )
   }
 
-  // Функция для переключения статуса заметки (выполнена/активна)
   const toggleNoteCompleted = (id) => {
     setNotes(prevNotes =>
       prevNotes.map(note =>
@@ -95,7 +120,6 @@ export default function App() {
     )
   }
 
-  // Обработчик установки приложения
   const handleInstallClick = async () => {
     if (!installPrompt) return
     installPrompt.prompt()
@@ -105,33 +129,37 @@ export default function App() {
     }
   }
 
-  // Обработчик запроса уведомлений
-  const handleEnableNotifications = async () => {
-    if (!("Notification" in window)) {
-      alert("Ваш браузер не поддерживает уведомления")
-      return
-    }
-    const permission = await Notification.requestPermission()
-    if (permission === "granted") {
-      setNotificationsEnabled(true)
-    } else {
+  const handleNotificationToggle = () => {
+    if (isSubscribed) {
+      localStorage.setItem('notifications', 'disabled')
+      setIsSubscribed(false)
       setNotificationsEnabled(false)
-      alert("Уведомления не были разрешены")
+    } else {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          localStorage.setItem('notifications', 'enabled')
+          setIsSubscribed(true)
+          setNotificationsEnabled(true)
+          navigator.serviceWorker.ready.then(reg => {
+            reg.showNotification('Уведомления включены 👍')
+          })
+        } else {
+          alert('Уведомления не были разрешены')
+        }
+      })
     }
   }
 
-  // Фильтрация заметок по выбранному фильтру
   const filteredNotes = notes.filter(note => {
     if (filter === 'Активные') return !note.completed
     if (filter === 'Выполненные') return note.completed
-    return true // 'Все'
+    return true
   })
 
   return (
     <div className="app-container">
-      {/* Кнопка установки PWA */}
       {showInstallButton && (
-        <button 
+        <button
           onClick={handleInstallClick}
           className="install-button"
           aria-label="Установить приложение"
@@ -147,25 +175,23 @@ export default function App() {
             ⚡ Офлайн-режим
           </div>
         )}
-        {/* Новая кнопка для включения уведомлений */}
-        <button 
-          onClick={handleEnableNotifications}
+        <button
+          onClick={handleNotificationToggle}
           className="notification-button"
-          aria-label="Включить уведомления"
+          aria-label="Управление уведомлениями"
         >
-          Включить уведомления
+          {isSubscribed ? 'Отключить уведомления' : 'Включить уведомления'}
         </button>
       </header>
 
       <main className="main-content">
         <AddNote onAdd={handleAddNote} />
-        {/* Компонент для фильтрации заметок */}
         <Filter currentFilter={filter} setFilter={setFilter} />
-        <NoteList 
+        <NoteList
           notes={filteredNotes}
           onDelete={handleDeleteNote}
           onUpdate={handleUpdateNote}
-          onToggleCompleted={toggleNoteCompleted} // передаём функцию для переключения статуса
+          onToggleCompleted={toggleNoteCompleted}
         />
       </main>
 
